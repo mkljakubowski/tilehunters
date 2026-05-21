@@ -1,20 +1,16 @@
 <template>
   <div ref="mapContainer" class="map-container">
-    <div class="grid-control">
-      <label class="grid-toggle">
-        <input type="checkbox" v-model="showGrid" @change="drawGrid" />
-        Grid
-      </label>
-      <div v-if="showGrid" class="grid-size">
-        <input
-          type="number"
-          v-model.number="gridSizeKm"
-          min="0.1"
-          max="100"
-          step="0.1"
-          @change="drawGrid"
-        />
-        <span>km</span>
+    <div class="map-control">
+      <div class="control-section">
+        <span class="control-label">Map</span>
+        <div class="map-type-buttons">
+          <button
+            v-for="mt in mapTypes"
+            :key="mt.id"
+            :class="['map-type-btn', { active: mapType === mt.id }]"
+            @click="setMapType(mt.id)"
+          >{{ mt.label }}</button>
+        </div>
       </div>
     </div>
   </div>
@@ -39,13 +35,42 @@ const props = defineProps({
 const emit = defineEmits(['tileClick']);
 
 const mapContainer = ref(null);
-const showGrid = ref(true);
-const gridSizeKm = ref(1);
+const mapType = ref('dark');
+
+const mapTypes = [
+  {
+    id: 'streets',
+    label: 'Streets',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  },
+  {
+    id: 'dark',
+    label: 'Dark',
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+    maxZoom: 19,
+  },
+  {
+    id: 'satellite',
+    label: 'Satellite',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics',
+    maxZoom: 18,
+  },
+  {
+    id: 'topo',
+    label: 'Topo',
+    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a>',
+    maxZoom: 17,
+  },
+];
 
 let map = null;
 let tileLayer = null;
 let tilesLayerGroup = null;
-let gridLayerGroup = null;
 let activityPolylineLayer = null;
 
 function tileToLatLon(x, y, zoom) {
@@ -62,37 +87,19 @@ function getTileBounds(x, y, zoom) {
   return [[nw.lat, nw.lon], [se.lat, se.lon]];
 }
 
-function drawGrid() {
-  gridLayerGroup.clearLayers();
-  if (!showGrid.value || !map) return;
-
-  const bounds = map.getBounds();
-  const south = bounds.getSouth();
-  const north = bounds.getNorth();
-  const west = bounds.getWest();
-  const east = bounds.getEast();
-
-  const stepLat = gridSizeKm.value / 111.32;
-  const centerLat = (south + north) / 2;
-  const stepLon = gridSizeKm.value / (111.32 * Math.cos(centerLat * Math.PI / 180));
-
-  const latLines = Math.ceil((north - south) / stepLat);
-  const lonLines = Math.ceil((east - west) / stepLon);
-
-  if (latLines + lonLines > 400) return;
-
-  const startLat = Math.floor(south / stepLat) * stepLat;
-  const startLon = Math.floor(west / stepLon) * stepLon;
-
-  const style = { color: '#ffffff', weight: 0.5, opacity: 0.2, interactive: false };
-
-  for (let lat = startLat; lat <= north + stepLat; lat += stepLat) {
-    L.polyline([[lat, west - stepLon], [lat, east + stepLon]], style).addTo(gridLayerGroup);
+function setMapType(id) {
+  mapType.value = id;
+  if (!map) return;
+  const mt = mapTypes.find((t) => t.id === id);
+  if (tileLayer) {
+    map.removeLayer(tileLayer);
   }
-
-  for (let lon = startLon; lon <= east + stepLon; lon += stepLon) {
-    L.polyline([[south - stepLat, lon], [north + stepLat, lon]], style).addTo(gridLayerGroup);
-  }
+  tileLayer = L.tileLayer(mt.url, {
+    attribution: mt.attribution,
+    maxZoom: mt.maxZoom,
+  });
+  tileLayer.addTo(map);
+  tileLayer.bringToBack();
 }
 
 function drawTiles(tiles) {
@@ -143,26 +150,21 @@ onMounted(() => {
     zoomControl: true,
   });
 
-  tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    maxZoom: 19,
+  const initial = mapTypes.find((mt) => mt.id === mapType.value);
+  tileLayer = L.tileLayer(initial.url, {
+    attribution: initial.attribution,
+    maxZoom: initial.maxZoom,
   }).addTo(map);
 
   tilesLayerGroup = L.layerGroup().addTo(map);
-  gridLayerGroup = L.layerGroup().addTo(map);
-
-  map.on('moveend zoomend', drawGrid);
 
   if (props.tiles.length > 0) {
     drawTiles(props.tiles);
   }
-
-  drawGrid();
 });
 
 onBeforeUnmount(() => {
   if (map) {
-    map.off('moveend zoomend', drawGrid);
     map.remove();
     map = null;
   }
@@ -204,7 +206,7 @@ watch(
   position: relative;
 }
 
-.grid-control {
+.map-control {
   position: absolute;
   bottom: 2rem;
   right: 0.75rem;
@@ -222,46 +224,42 @@ watch(
   user-select: none;
 }
 
-.grid-toggle {
+.control-section {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
-  cursor: pointer;
+  gap: 0.5rem;
+}
+
+.control-label {
+  color: #9ca3af;
   white-space: nowrap;
 }
 
-.grid-toggle input[type="checkbox"] {
-  accent-color: #FF6B35;
-  cursor: pointer;
-  width: 14px;
-  height: 14px;
-}
-
-.grid-size {
+.map-type-buttons {
   display: flex;
-  align-items: center;
   gap: 0.25rem;
-  border-left: 1px solid #374151;
-  padding-left: 0.625rem;
 }
 
-.grid-size input[type="number"] {
-  width: 4rem;
+.map-type-btn {
   background: #1f2937;
   border: 1px solid #374151;
   border-radius: 4px;
+  color: #d1d5db;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.map-type-btn:hover {
+  background: #374151;
   color: #f3f4f6;
-  font-size: 0.8rem;
-  padding: 0.2rem 0.375rem;
-  text-align: right;
 }
 
-.grid-size input[type="number"]:focus {
-  outline: none;
+.map-type-btn.active {
+  background: #FF6B35;
   border-color: #FF6B35;
-}
-
-.grid-size span {
-  color: #9ca3af;
+  color: #fff;
 }
 </style>
