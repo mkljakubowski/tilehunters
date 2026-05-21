@@ -68,10 +68,25 @@ const mapTypes = [
   },
 ];
 
+const TILE_ZOOM = 14;
+const UNVISITED_MIN_MAP_ZOOM = 10;
+const UNVISITED_MAX_TILES = 5000;
+
 let map = null;
 let tileLayer = null;
+let unvisitedLayerGroup = null;
 let tilesLayerGroup = null;
 let activityPolylineLayer = null;
+let visitedSet = new Set();
+
+function latLonToTile(lat, lon, zoom) {
+  const x = Math.floor((lon + 180) / 360 * Math.pow(2, zoom));
+  const y = Math.floor(
+    (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI)
+    / 2 * Math.pow(2, zoom)
+  );
+  return { x, y };
+}
 
 function tileToLatLon(x, y, zoom) {
   const n = Math.PI - 2 * Math.PI * y / Math.pow(2, zoom);
@@ -85,6 +100,37 @@ function getTileBounds(x, y, zoom) {
   const nw = tileToLatLon(x, y, zoom);
   const se = tileToLatLon(x + 1, y + 1, zoom);
   return [[nw.lat, nw.lon], [se.lat, se.lon]];
+}
+
+function drawUnvisitedTiles() {
+  unvisitedLayerGroup.clearLayers();
+  if (!map || map.getZoom() < UNVISITED_MIN_MAP_ZOOM) return;
+
+  const bounds = map.getBounds();
+  const nw = latLonToTile(bounds.getNorth(), bounds.getWest(), TILE_ZOOM);
+  const se = latLonToTile(bounds.getSouth(), bounds.getEast(), TILE_ZOOM);
+
+  const count = (se.x - nw.x + 1) * (se.y - nw.y + 1);
+  if (count > UNVISITED_MAX_TILES) return;
+
+  const renderer = L.canvas({ padding: 0.5 });
+  const style = {
+    color: '#ffffff',
+    weight: 0.5,
+    opacity: 0.15,
+    fillColor: '#ffffff',
+    fillOpacity: 0.04,
+    interactive: false,
+    renderer,
+  };
+
+  for (let x = nw.x; x <= se.x; x++) {
+    for (let y = nw.y; y <= se.y; y++) {
+      if (!visitedSet.has(`${x},${y}`)) {
+        L.rectangle(getTileBounds(x, y, TILE_ZOOM), style).addTo(unvisitedLayerGroup);
+      }
+    }
+  }
 }
 
 function setMapType(id) {
@@ -108,7 +154,7 @@ function drawTiles(tiles) {
   const renderer = L.canvas({ padding: 0.5 });
 
   for (const tile of tiles) {
-    const bounds = getTileBounds(tile.x, tile.y, tile.zoom || 14);
+    const bounds = getTileBounds(tile.x, tile.y, tile.zoom || TILE_ZOOM);
     const rect = L.rectangle(bounds, {
       color: '#FF6B35',
       weight: 1,
@@ -156,15 +202,20 @@ onMounted(() => {
     maxZoom: initial.maxZoom,
   }).addTo(map);
 
+  unvisitedLayerGroup = L.layerGroup().addTo(map);
   tilesLayerGroup = L.layerGroup().addTo(map);
+
+  map.on('moveend zoomend', drawUnvisitedTiles);
 
   if (props.tiles.length > 0) {
     drawTiles(props.tiles);
+    drawUnvisitedTiles();
   }
 });
 
 onBeforeUnmount(() => {
   if (map) {
+    map.off('moveend zoomend', drawUnvisitedTiles);
     map.remove();
     map = null;
   }
@@ -173,11 +224,14 @@ onBeforeUnmount(() => {
 watch(
   () => props.tiles,
   (newTiles) => {
+    visitedSet = new Set(newTiles.map((t) => `${t.x},${t.y}`));
+
     if (map && tilesLayerGroup) {
       drawTiles(newTiles);
+      drawUnvisitedTiles();
 
       if (newTiles.length > 0) {
-        const bounds = newTiles.map((t) => getTileBounds(t.x, t.y, t.zoom || 14));
+        const bounds = newTiles.map((t) => getTileBounds(t.x, t.y, t.zoom || TILE_ZOOM));
         const allBounds = bounds.reduce(
           (acc, b) => acc.extend(b),
           L.latLngBounds(bounds[0])
