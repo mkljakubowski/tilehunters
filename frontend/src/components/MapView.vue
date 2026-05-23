@@ -12,6 +12,11 @@
           >{{ mt.label }}</button>
         </div>
       </div>
+      <div class="control-divider" />
+      <label class="control-toggle">
+        <input type="checkbox" v-model="showRoute" />
+        Route
+      </label>
     </div>
   </div>
 </template>
@@ -26,6 +31,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  allPolylines: {
+    type: Array,
+    default: () => [],
+  },
   selectedActivityPolyline: {
     type: Array,
     default: null,
@@ -36,6 +45,7 @@ const emit = defineEmits(['tileClick']);
 
 const mapContainer = ref(null);
 const mapType = ref('dark');
+const showRoute = ref(true);
 
 const mapTypes = [
   {
@@ -76,6 +86,7 @@ let map = null;
 let tileLayer = null;
 let unvisitedLayerGroup = null;
 let tilesLayerGroup = null;
+let allRoutesLayerGroup = null;
 let activityPolylineLayer = null;
 let visitedSet = new Set();
 
@@ -172,7 +183,24 @@ function drawTiles(tiles) {
   }
 }
 
-function drawActivityPolyline(latLons) {
+function drawAllRoutes(polylines) {
+  allRoutesLayerGroup.clearLayers();
+  if (!showRoute.value || !polylines || polylines.length === 0) return;
+
+  for (const latLons of polylines) {
+    if (latLons && latLons.length > 0) {
+      L.polyline(latLons, {
+        color: '#93c5fd',
+        weight: 1.5,
+        opacity: 0.5,
+        lineJoin: 'round',
+        interactive: false,
+      }).addTo(allRoutesLayerGroup);
+    }
+  }
+}
+
+function drawSelectedRoute(latLons) {
   if (activityPolylineLayer) {
     activityPolylineLayer.remove();
     activityPolylineLayer = null;
@@ -204,6 +232,7 @@ onMounted(() => {
 
   unvisitedLayerGroup = L.layerGroup().addTo(map);
   tilesLayerGroup = L.layerGroup().addTo(map);
+  allRoutesLayerGroup = L.layerGroup().addTo(map);
 
   map.on('moveend zoomend', drawUnvisitedTiles);
 
@@ -211,6 +240,8 @@ onMounted(() => {
     drawTiles(props.tiles);
     drawUnvisitedTiles();
   }
+
+  drawAllRoutes(props.allPolylines);
 });
 
 onBeforeUnmount(() => {
@@ -244,13 +275,27 @@ watch(
 );
 
 watch(
-  () => props.selectedActivityPolyline,
-  (latLons) => {
-    if (map) {
-      drawActivityPolyline(latLons);
-    }
+  () => props.allPolylines,
+  (polylines) => {
+    if (map) drawAllRoutes(polylines);
   }
 );
+
+watch(
+  () => props.selectedActivityPolyline,
+  (latLons) => {
+    if (map) drawSelectedRoute(latLons);
+  }
+);
+
+watch(showRoute, (val) => {
+  if (!map) return;
+  if (val) {
+    drawAllRoutes(props.allPolylines);
+  } else {
+    allRoutesLayerGroup.clearLayers();
+  }
+});
 </script>
 
 <style scoped>
@@ -315,5 +360,26 @@ watch(
   background: #FF6B35;
   border-color: #FF6B35;
   color: #fff;
+}
+
+.control-divider {
+  width: 1px;
+  height: 1.25rem;
+  background: #374151;
+}
+
+.control-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.control-toggle input[type="checkbox"] {
+  accent-color: #FF6B35;
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
 }
 </style>

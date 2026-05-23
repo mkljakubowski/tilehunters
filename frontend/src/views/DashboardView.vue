@@ -64,6 +64,7 @@
     <main class="map-area">
       <MapView
         :tiles="visitedTiles"
+        :all-polylines="allPolylines"
         :selected-activity-polyline="selectedPolyline"
         @tile-click="onTileClick"
       />
@@ -91,6 +92,7 @@ const userStore = useUserStore();
 
 const visitedTiles = ref([]);
 const activities = ref([]);
+const allPolylines = ref([]);
 const selectedActivity = ref(null);
 const selectedPolyline = ref(null);
 const loadingTiles = ref(false);
@@ -122,6 +124,15 @@ async function fetchActivities() {
   }
 }
 
+async function fetchAllPolylines() {
+  try {
+    const response = await api.get('/activities/polylines');
+    allPolylines.value = response.data;
+  } catch (err) {
+    console.error('Failed to fetch polylines:', err);
+  }
+}
+
 async function selectActivity(activity) {
   if (selectedActivity.value?.id === activity.id) {
     // Deselect
@@ -150,10 +161,10 @@ async function syncActivities() {
     const response = await api.post('/activities/sync');
     const { synced, tiles } = response.data;
     syncResult.value = `Synced ${synced} new activit${synced === 1 ? 'y' : 'ies'}. Total: ${tiles.toLocaleString()} tiles.`;
-    await Promise.all([fetchTiles(), fetchActivities()]);
+    await Promise.all([fetchTiles(), fetchActivities(), fetchAllPolylines()]);
   } catch (err) {
     console.error('Sync failed:', err);
-    syncError.value = err.response?.data?.details || 'Sync failed. Please try again.';
+    syncError.value = err.response?.data?.details || err.message || 'Sync failed. Please try again.';
   } finally {
     syncing.value = false;
   }
@@ -173,7 +184,7 @@ onMounted(async () => {
   if (!userStore.isLoggedIn) {
     await userStore.fetchMe();
   }
-  await Promise.all([fetchTiles(), fetchActivities()]);
+  await Promise.all([fetchTiles(), fetchActivities(), fetchAllPolylines()]);
 });
 </script>
 

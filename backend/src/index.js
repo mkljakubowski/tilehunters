@@ -5,6 +5,7 @@ import connectPgSimple from 'connect-pg-simple';
 import cors from 'cors';
 import pool from './db.js';
 import { runMigrations } from './db/migrations.js';
+import { startPolylineBackfill } from './services/polylineBackfill.js';
 import authRoutes from './routes/auth.js';
 import activitiesRoutes from './routes/activities.js';
 import tilesRoutes from './routes/tiles.js';
@@ -58,6 +59,7 @@ async function start() {
     app.listen(PORT, () => {
       console.log(`TileHunters backend running on port ${PORT}`);
     });
+    startPolylineBackfill();
   } catch (err) {
     console.error('Failed to start server:', err);
     process.exit(1);

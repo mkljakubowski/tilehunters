@@ -53,6 +53,10 @@ export async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_activities_user ON activities(user_id);
     `);
 
+    await client.query(`
+      ALTER TABLE activities ADD COLUMN IF NOT EXISTS detail_polyline TEXT;
+    `);
+
     console.log('Migrations completed successfully');
   } finally {
     client.release();
