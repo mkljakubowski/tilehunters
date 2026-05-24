@@ -49,8 +49,8 @@ const props = defineProps({
 const emit = defineEmits(['tileClick', 'activityClick']);
 
 const mapContainer = ref(null);
-const mapType = ref('dark');
-const showRoute = ref(true);
+const mapType = ref('light');
+const showRoute = ref(false);
 const gpxLayer = ref(null);
 
 const mapTypes = [
@@ -374,10 +374,30 @@ function onGpxFile(event) {
   reader.readAsText(file);
 }
 
+const MAP_STATE_KEY = 'tilehunters_map_state';
+
+function saveMapState() {
+  const center = map.getCenter();
+  localStorage.setItem(MAP_STATE_KEY, JSON.stringify({
+    lat: center.lat,
+    lng: center.lng,
+    zoom: map.getZoom(),
+  }));
+}
+
+function loadMapState() {
+  try {
+    const raw = localStorage.getItem(MAP_STATE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
 onMounted(() => {
+  const saved = loadMapState();
   map = L.map(mapContainer.value, {
-    center: [47.3769, 8.5417],
-    zoom: 10,
+    center: saved ? [saved.lat, saved.lng] : [47.3769, 8.5417],
+    zoom: saved ? saved.zoom : 10,
     zoomControl: true,
   });
 
@@ -392,7 +412,7 @@ onMounted(() => {
   allRoutesLayerGroup = L.layerGroup().addTo(map);
   gpxPreviewLayerGroup = L.layerGroup().addTo(map);
 
-  map.on('moveend zoomend', drawUnvisitedTiles);
+  map.on('moveend zoomend', () => { saveMapState(); drawUnvisitedTiles(); });
 
   if (props.tiles.length > 0) {
     visitedSet = new Set(props.tiles.map((t) => `${t.x},${t.y}`));
@@ -406,7 +426,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (map) {
-    map.off('moveend zoomend', drawUnvisitedTiles);
+    map.off('moveend zoomend');
     map.remove();
     map = null;
   }
@@ -422,7 +442,7 @@ watch(
       drawTiles(newTiles);
       drawUnvisitedTiles();
 
-      if (newTiles.length > 0) {
+      if (newTiles.length > 0 && !loadMapState()) {
         const bounds = newTiles.map((t) => getTileBounds(t.x, t.y, t.zoom || TILE_ZOOM));
         const allBounds = bounds.reduce(
           (acc, b) => acc.extend(b),
@@ -433,13 +453,6 @@ watch(
     }
   },
   { deep: false }
-);
-
-watch(
-  () => props.allPolylines,
-  (polylines) => {
-    if (map) drawAllRoutes(polylines);
-  }
 );
 
 watch(
