@@ -140,7 +140,8 @@ router.post('/sync', requireAuth, async (req, res) => {
 router.get('/', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, strava_id, name, sport_type, start_date, distance, moving_time
+      `SELECT id, strava_id, name, sport_type, start_date, distance, moving_time,
+              (detail_polyline IS NOT NULL AND detail_polyline != '') AS has_detail_polyline
        FROM activities
        WHERE user_id = $1
        ORDER BY start_date DESC`,
@@ -157,15 +158,53 @@ router.get('/', requireAuth, async (req, res) => {
 router.get('/polylines', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT COALESCE(NULLIF(detail_polyline, ''), summary_polyline) AS polyline FROM activities
+      `SELECT id, COALESCE(NULLIF(detail_polyline, ''), summary_polyline) AS polyline FROM activities
        WHERE user_id = $1 AND summary_polyline IS NOT NULL AND summary_polyline != ''
        ORDER BY start_date DESC`,
       [req.session.userId]
     );
-    const decoded = result.rows.map((r) => polyline.decode(r.polyline));
+    const decoded = result.rows.map((r) => ({ id: r.id, points: polyline.decode(r.polyline) }));
     res.json(decoded);
   } catch (err) {
     console.error('Error fetching polylines:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/activities/:id/reprocess-tiles — recompute visited tiles from best available polyline
+router.post('/:id/reprocess-tiles', requireAuth, async (req, res) => {
+  const ZOOM = 14;
+  try {
+    const result = await pool.query(
+      `SELECT id, start_date, COALESCE(NULLIF(detail_polyline, ''), summary_polyline) AS polyline
+       FROM activities WHERE id = $1 AND user_id = $2`,
+      [req.params.id, req.session.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Activity not found' });
+    }
+
+    const { id, start_date, polyline: encodedPolyline } = result.rows[0];
+    if (!encodedPolyline) {
+      return res.json({ inserted: 0 });
+    }
+
+    const tiles = computeTilesForPolyline(encodedPolyline, ZOOM);
+    let inserted = 0;
+    for (const tile of tiles) {
+      const r = await pool.query(
+        `INSERT INTO visited_tiles (user_id, x, y, zoom, first_visited_at)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (user_id, x, y, zoom) DO NOTHING`,
+        [req.session.userId, tile.x, tile.y, ZOOM, start_date]
+      );
+      inserted += r.rowCount;
+    }
+
+    res.json({ inserted });
+  } catch (err) {
+    console.error('Reprocess tiles error:', err.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

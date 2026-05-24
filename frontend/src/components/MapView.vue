@@ -41,7 +41,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['tileClick']);
+const emit = defineEmits(['tileClick', 'activityClick']);
 
 const mapContainer = ref(null);
 const mapType = ref('dark');
@@ -89,6 +89,7 @@ let tilesLayerGroup = null;
 let allRoutesLayerGroup = null;
 let activityPolylineLayer = null;
 let visitedSet = new Set();
+let biggestSquareSet = new Set();
 
 function latLonToTile(lat, lon, zoom) {
   const x = Math.floor((lon + 180) / 360 * Math.pow(2, zoom));
@@ -159,6 +160,30 @@ function setMapType(id) {
   tileLayer.bringToBack();
 }
 
+function computeBiggestSquare(tiles) {
+  const dp = new Map();
+  let maxSize = 0;
+  let maxX = 0, maxY = 0;
+
+  // Sort by y then x so dp dependencies are always computed first
+  const sorted = [...tiles].sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x);
+
+  for (const { x, y } of sorted) {
+    const top     = dp.get(`${x},${y - 1}`) ?? 0;
+    const left    = dp.get(`${x - 1},${y}`) ?? 0;
+    const topLeft = dp.get(`${x - 1},${y - 1}`) ?? 0;
+    const size = Math.min(top, left, topLeft) + 1;
+    dp.set(`${x},${y}`, size);
+    if (size > maxSize) { maxSize = size; maxX = x; maxY = y; }
+  }
+
+  const result = new Set();
+  for (let x = maxX - maxSize + 1; x <= maxX; x++)
+    for (let y = maxY - maxSize + 1; y <= maxY; y++)
+      result.add(`${x},${y}`);
+  return result;
+}
+
 function isEnclosed(x, y) {
   return (
     visitedSet.has(`${x},${y - 1}`) &&
@@ -174,12 +199,16 @@ function drawTiles(tiles) {
   const renderer = L.canvas({ padding: 0.5 });
 
   for (const tile of tiles) {
-    const enclosed = isEnclosed(tile.x, tile.y);
+    const key = `${tile.x},${tile.y}`;
+    const inSquare = biggestSquareSet.has(key);
+    const enclosed = !inSquare && isEnclosed(tile.x, tile.y);
+    const color      = inSquare ? '#3b82f6' : enclosed ? '#22c55e' : '#FF6B35';
+    const fillColor  = inSquare ? 'rgba(59, 130, 246, 0.35)' : enclosed ? 'rgba(34, 197, 94, 0.35)' : 'rgba(255, 165, 0, 0.35)';
     const bounds = getTileBounds(tile.x, tile.y, tile.zoom || TILE_ZOOM);
     const rect = L.rectangle(bounds, {
-      color: enclosed ? '#22c55e' : '#FF6B35',
+      color,
       weight: 1,
-      fillColor: enclosed ? 'rgba(34, 197, 94, 0.35)' : 'rgba(255, 165, 0, 0.35)',
+      fillColor,
       fillOpacity: 0.35,
       opacity: 0.7,
       renderer,
@@ -197,16 +226,17 @@ function drawAllRoutes(polylines) {
   allRoutesLayerGroup.clearLayers();
   if (!showRoute.value || !polylines || polylines.length === 0) return;
 
-  for (const latLons of polylines) {
-    if (latLons && latLons.length > 0) {
-      L.polyline(latLons, {
-        color: '#93c5fd',
-        weight: 1.5,
-        opacity: 0.5,
-        lineJoin: 'round',
-        interactive: false,
-      }).addTo(allRoutesLayerGroup);
-    }
+  for (const { id, points } of polylines) {
+    if (!points || points.length === 0) continue;
+    L.polyline(points, {
+      color: '#93c5fd',
+      weight: 3,
+      opacity: 0.4,
+      lineJoin: 'round',
+      interactive: true,
+    })
+      .on('click', () => emit('activityClick', id))
+      .addTo(allRoutesLayerGroup);
   }
 }
 
@@ -248,6 +278,7 @@ onMounted(() => {
 
   if (props.tiles.length > 0) {
     visitedSet = new Set(props.tiles.map((t) => `${t.x},${t.y}`));
+    biggestSquareSet = computeBiggestSquare(props.tiles);
     drawTiles(props.tiles);
     drawUnvisitedTiles();
   }
@@ -267,6 +298,7 @@ watch(
   () => props.tiles,
   (newTiles) => {
     visitedSet = new Set(newTiles.map((t) => `${t.x},${t.y}`));
+    biggestSquareSet = computeBiggestSquare(newTiles);
 
     if (map && tilesLayerGroup) {
       drawTiles(newTiles);

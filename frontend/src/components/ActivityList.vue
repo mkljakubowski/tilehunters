@@ -18,6 +18,7 @@
         :key="activity.id"
         class="activity-item"
         :class="{ active: selectedActivityId === activity.id }"
+        :data-activity-id="activity.id"
         @click="$emit('select', activity)"
       >
         <div class="activity-icon" :title="activity.sport_type">
@@ -29,6 +30,40 @@
             <span>{{ formatDate(activity.start_date) }}</span>
             <span class="sep">·</span>
             <span>{{ formatDistance(activity.distance) }}</span>
+          </div>
+          <div v-if="selectedActivityId === activity.id" class="activity-details">
+            <div class="detail-row">
+              <span class="detail-label">Duration</span>
+              <span>{{ formatDuration(activity.moving_time) }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Distance</span>
+              <span>{{ formatDistance(activity.distance) }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">GPS detail</span>
+              <span :class="activity.has_detail_polyline ? 'detail-loaded' : 'detail-pending'">
+                {{ activity.has_detail_polyline ? 'loaded' : 'pending' }}
+              </span>
+            </div>
+            <div class="detail-actions">
+              <button
+                class="reprocess-btn"
+                :disabled="reprocessingId === activity.id"
+                @click.stop="$emit('reprocess', activity)"
+              >
+                {{ reprocessingId === activity.id ? 'Processing…' : 'Reprocess tiles' }}
+              </button>
+              <a
+                :href="`https://www.strava.com/activities/${activity.strava_id}`"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="strava-link"
+                @click.stop
+              >
+                View on Strava ↗
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -46,9 +81,13 @@ defineProps({
     type: Number,
     default: null,
   },
+  reprocessingId: {
+    type: Number,
+    default: null,
+  },
 });
 
-defineEmits(['select']);
+defineEmits(['select', 'reprocess']);
 
 function sportIcon(sportType) {
   if (!sportType) return '🏃';
@@ -74,6 +113,13 @@ function formatDistance(meters) {
   if (!meters) return '—';
   const km = meters / 1000;
   return km >= 1 ? `${km.toFixed(1)} km` : `${Math.round(meters)} m`;
+}
+
+function formatDuration(seconds) {
+  if (!seconds) return '—';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 </script>
 
@@ -187,5 +233,74 @@ function formatDistance(meters) {
 
 .sep {
   margin: 0 0.25rem;
+}
+
+.activity-details {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #1f2937;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.detail-label {
+  color: #6b7280;
+}
+
+.strava-link {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: #FC4C02;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.strava-link:hover {
+  text-decoration: underline;
+}
+
+.detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.reprocess-btn {
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 4px;
+  color: #d1d5db;
+  font-size: 0.72rem;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.reprocess-btn:hover:not(:disabled) {
+  background: #374151;
+  color: #f3f4f6;
+}
+
+.reprocess-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.detail-loaded {
+  color: #22c55e;
+}
+
+.detail-pending {
+  color: #6b7280;
 }
 </style>

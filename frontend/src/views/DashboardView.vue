@@ -56,7 +56,9 @@
       <ActivityList
         :activities="activities"
         :selected-activity-id="selectedActivity?.id ?? null"
+        :reprocessing-id="reprocessingId"
         @select="selectActivity"
+        @reprocess="reprocessTiles"
       />
     </aside>
 
@@ -67,6 +69,7 @@
         :all-polylines="allPolylines"
         :selected-activity-polyline="selectedPolyline"
         @tile-click="onTileClick"
+        @activity-click="onActivityClick"
       />
 
       <!-- Loading overlay -->
@@ -79,7 +82,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '../stores/user.js';
 import api from '../api/index.js';
@@ -99,6 +102,7 @@ const loadingTiles = ref(false);
 const syncing = ref(false);
 const syncResult = ref('');
 const syncError = ref('');
+const reprocessingId = ref(null);
 
 const tileCount = computed(() => visitedTiles.value.length);
 const activityCount = computed(() => activities.value.length);
@@ -176,8 +180,28 @@ async function handleLogout() {
 }
 
 function onTileClick(tile) {
-  // Future: could show tile info popup
   console.log('Tile clicked:', tile);
+}
+
+async function reprocessTiles(activity) {
+  reprocessingId.value = activity.id;
+  try {
+    await api.post(`/activities/${activity.id}/reprocess-tiles`);
+    await fetchTiles();
+  } catch (err) {
+    console.error('Reprocess failed:', err);
+  } finally {
+    reprocessingId.value = null;
+  }
+}
+
+async function onActivityClick(activityId) {
+  const activity = activities.value.find((a) => a.id === activityId);
+  if (!activity) return;
+  await selectActivity(activity);
+  await nextTick();
+  document.querySelector(`[data-activity-id="${activityId}"]`)
+    ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 onMounted(async () => {
