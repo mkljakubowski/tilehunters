@@ -159,17 +159,27 @@ function setMapType(id) {
   tileLayer.bringToBack();
 }
 
+function isEnclosed(x, y) {
+  return (
+    visitedSet.has(`${x},${y - 1}`) &&
+    visitedSet.has(`${x},${y + 1}`) &&
+    visitedSet.has(`${x - 1},${y}`) &&
+    visitedSet.has(`${x + 1},${y}`)
+  );
+}
+
 function drawTiles(tiles) {
   tilesLayerGroup.clearLayers();
 
   const renderer = L.canvas({ padding: 0.5 });
 
   for (const tile of tiles) {
+    const enclosed = isEnclosed(tile.x, tile.y);
     const bounds = getTileBounds(tile.x, tile.y, tile.zoom || TILE_ZOOM);
     const rect = L.rectangle(bounds, {
-      color: '#FF6B35',
+      color: enclosed ? '#22c55e' : '#FF6B35',
       weight: 1,
-      fillColor: 'rgba(255, 165, 0, 0.35)',
+      fillColor: enclosed ? 'rgba(34, 197, 94, 0.35)' : 'rgba(255, 165, 0, 0.35)',
       fillOpacity: 0.35,
       opacity: 0.7,
       renderer,
@@ -219,8 +229,8 @@ function drawSelectedRoute(latLons) {
 
 onMounted(() => {
   map = L.map(mapContainer.value, {
-    center: [51.505, -0.09],
-    zoom: 6,
+    center: [47.3769, 8.5417],
+    zoom: 10,
     zoomControl: true,
   });
 
@@ -237,6 +247,7 @@ onMounted(() => {
   map.on('moveend zoomend', drawUnvisitedTiles);
 
   if (props.tiles.length > 0) {
+    visitedSet = new Set(props.tiles.map((t) => `${t.x},${t.y}`));
     drawTiles(props.tiles);
     drawUnvisitedTiles();
   }
