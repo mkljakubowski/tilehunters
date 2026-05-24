@@ -25,6 +25,7 @@
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { computeBiggestSquare } from '../utils/tileStats.js';
 
 const props = defineProps({
   tiles: {
@@ -160,29 +161,6 @@ function setMapType(id) {
   tileLayer.bringToBack();
 }
 
-function computeBiggestSquare(tiles) {
-  const dp = new Map();
-  let maxSize = 0;
-  let maxX = 0, maxY = 0;
-
-  // Sort by y then x so dp dependencies are always computed first
-  const sorted = [...tiles].sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x);
-
-  for (const { x, y } of sorted) {
-    const top     = dp.get(`${x},${y - 1}`) ?? 0;
-    const left    = dp.get(`${x - 1},${y}`) ?? 0;
-    const topLeft = dp.get(`${x - 1},${y - 1}`) ?? 0;
-    const size = Math.min(top, left, topLeft) + 1;
-    dp.set(`${x},${y}`, size);
-    if (size > maxSize) { maxSize = size; maxX = x; maxY = y; }
-  }
-
-  const result = new Set();
-  for (let x = maxX - maxSize + 1; x <= maxX; x++)
-    for (let y = maxY - maxSize + 1; y <= maxY; y++)
-      result.add(`${x},${y}`);
-  return result;
-}
 
 function isEnclosed(x, y) {
   return (
@@ -278,7 +256,7 @@ onMounted(() => {
 
   if (props.tiles.length > 0) {
     visitedSet = new Set(props.tiles.map((t) => `${t.x},${t.y}`));
-    biggestSquareSet = computeBiggestSquare(props.tiles);
+    biggestSquareSet = computeBiggestSquare(props.tiles).set;
     drawTiles(props.tiles);
     drawUnvisitedTiles();
   }
@@ -298,7 +276,7 @@ watch(
   () => props.tiles,
   (newTiles) => {
     visitedSet = new Set(newTiles.map((t) => `${t.x},${t.y}`));
-    biggestSquareSet = computeBiggestSquare(newTiles);
+    biggestSquareSet = computeBiggestSquare(newTiles).set;
 
     if (map && tilesLayerGroup) {
       drawTiles(newTiles);

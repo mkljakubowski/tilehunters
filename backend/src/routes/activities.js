@@ -51,8 +51,8 @@ router.post('/sync', requireAuth, async (req, res) => {
 
         // Insert activity (skip if already exists)
         const insertResult = await pool.query(
-          `INSERT INTO activities (user_id, strava_id, name, sport_type, start_date, distance, moving_time, summary_polyline)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          `INSERT INTO activities (user_id, strava_id, name, sport_type, start_date, distance, moving_time, summary_polyline, total_elevation_gain)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            ON CONFLICT (strava_id) DO NOTHING
            RETURNING id`,
           [
@@ -64,6 +64,7 @@ router.post('/sync', requireAuth, async (req, res) => {
             activity.distance,
             activity.moving_time,
             summaryPolylineStr,
+            activity.total_elevation_gain ?? null,
           ]
         );
 
@@ -110,6 +111,12 @@ router.post('/sync', requireAuth, async (req, res) => {
             );
             totalTiles++;
           }
+          if (isNew) {
+            await pool.query(
+              'UPDATE activities SET tile_count = $1 WHERE strava_id = $2',
+              [tiles.length, activity.id]
+            );
+          }
         }
       }
 
@@ -141,6 +148,7 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT id, strava_id, name, sport_type, start_date, distance, moving_time,
+              total_elevation_gain, tile_count,
               (detail_polyline IS NOT NULL AND detail_polyline != '') AS has_detail_polyline
        FROM activities
        WHERE user_id = $1
@@ -202,7 +210,9 @@ router.post('/:id/reprocess-tiles', requireAuth, async (req, res) => {
       inserted += r.rowCount;
     }
 
-    res.json({ inserted });
+    await pool.query('UPDATE activities SET tile_count = $1 WHERE id = $2', [tiles.length, id]);
+
+    res.json({ inserted, tileCount: tiles.length });
   } catch (err) {
     console.error('Reprocess tiles error:', err.message);
     res.status(500).json({ error: 'Internal server error' });

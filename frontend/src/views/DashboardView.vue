@@ -53,12 +53,23 @@
         </div>
       </div>
 
+      <div class="sidebar-tabs">
+        <button :class="['tab-btn', { active: sidebarTab === 'activities' }]" @click="sidebarTab = 'activities'">Activities</button>
+        <button :class="['tab-btn', { active: sidebarTab === 'stats' }]" @click="sidebarTab = 'stats'">Stats</button>
+      </div>
+
       <ActivityList
+        v-if="sidebarTab === 'activities'"
         :activities="activities"
         :selected-activity-id="selectedActivity?.id ?? null"
         :reprocessing-id="reprocessingId"
         @select="selectActivity"
         @reprocess="reprocessTiles"
+      />
+      <StatsTab
+        v-else
+        :tiles="visitedTiles"
+        :activities="activities"
       />
     </aside>
 
@@ -89,6 +100,7 @@ import api from '../api/index.js';
 import MapView from '../components/MapView.vue';
 import StatsPanel from '../components/StatsPanel.vue';
 import ActivityList from '../components/ActivityList.vue';
+import StatsTab from '../components/StatsTab.vue';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -99,6 +111,7 @@ const allPolylines = ref([]);
 const selectedActivity = ref(null);
 const selectedPolyline = ref(null);
 const loadingTiles = ref(false);
+const sidebarTab = ref('activities');
 const syncing = ref(false);
 const syncResult = ref('');
 const syncError = ref('');
@@ -198,6 +211,7 @@ async function reprocessTiles(activity) {
 async function onActivityClick(activityId) {
   const activity = activities.value.find((a) => a.id === activityId);
   if (!activity) return;
+  sidebarTab.value = 'activities';
   await selectActivity(activity);
   await nextTick();
   document.querySelector(`[data-activity-id="${activityId}"]`)
@@ -262,6 +276,34 @@ onMounted(async () => {
 .logout-btn:hover {
   background: #1f2937;
   color: #e5e7eb;
+}
+
+.sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid #1f2937;
+  flex-shrink: 0;
+}
+
+.tab-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #6b7280;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.6rem 0;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tab-btn:hover {
+  color: #e5e7eb;
+}
+
+.tab-btn.active {
+  color: #f3f4f6;
+  border-bottom-color: #FF6B35;
 }
 
 .sync-section {

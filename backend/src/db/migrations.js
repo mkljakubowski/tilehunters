@@ -57,6 +57,14 @@ export async function runMigrations() {
       ALTER TABLE activities ADD COLUMN IF NOT EXISTS detail_polyline TEXT;
     `);
 
+    await client.query(`
+      ALTER TABLE activities ADD COLUMN IF NOT EXISTS total_elevation_gain FLOAT;
+    `);
+
+    await client.query(`
+      ALTER TABLE activities ADD COLUMN IF NOT EXISTS tile_count INTEGER;
+    `);
+
     console.log('Migrations completed successfully');
   } finally {
     client.release();
