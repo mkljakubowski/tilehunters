@@ -43,6 +43,18 @@ export function lineTiles(x0, y0, x1, y1) {
   return tiles;
 }
 
+const INTERPOLATION_STEP_METERS = 50;
+
+function haversineMeters(lat0, lon0, lat1, lon1) {
+  const R = 6371000;
+  const dLat = (lat1 - lat0) * Math.PI / 180;
+  const dLon = (lon1 - lon0) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat0 * Math.PI / 180) * Math.cos(lat1 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
 export function computeTilesForPolyline(encodedPolyline, zoom = 14) {
   if (!encodedPolyline || encodedPolyline.length === 0) {
     return [];
@@ -60,16 +72,27 @@ export function computeTilesForPolyline(encodedPolyline, zoom = 14) {
 
   for (let i = 0; i < coords.length; i++) {
     const [lat, lon] = coords[i];
-    const tile = latLonToTile(lat, lon, zoom);
-    tileSet.add(`${tile.x},${tile.y}`);
+    const { x, y } = latLonToTile(lat, lon, zoom);
+    tileSet.add(`${x},${y}`);
 
-    if (i > 0) {
-      const [prevLat, prevLon] = coords[i - 1];
-      const prevTile = latLonToTile(prevLat, prevLon, zoom);
-      const tiles = lineTiles(prevTile.x, prevTile.y, tile.x, tile.y);
-      for (const t of tiles) {
-        tileSet.add(`${t.x},${t.y}`);
+    if (i === 0) continue;
+
+    const [prevLat, prevLon] = coords[i - 1];
+    const dist = haversineMeters(prevLat, prevLon, lat, lon);
+    const steps = Math.max(1, Math.ceil(dist / INTERPOLATION_STEP_METERS));
+
+    let curTile = latLonToTile(prevLat, prevLon, zoom);
+
+    for (let s = 1; s <= steps; s++) {
+      const t = s / steps;
+      const iLat = prevLat + t * (lat - prevLat);
+      const iLon = prevLon + t * (lon - prevLon);
+      const nextTile = latLonToTile(iLat, iLon, zoom);
+
+      for (const tile of lineTiles(curTile.x, curTile.y, nextTile.x, nextTile.y)) {
+        tileSet.add(`${tile.x},${tile.y}`);
       }
+      curTile = nextTile;
     }
   }
 
