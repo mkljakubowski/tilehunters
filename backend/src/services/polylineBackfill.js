@@ -76,7 +76,12 @@ async function processNextActivity() {
 
     console.log(`[backfill] Activity ${activity.strava_id}: inserted up to ${tiles.length} tiles`);
   } catch (err) {
-    console.error(`[backfill] Failed for activity ${activity.strava_id}:`, err.message);
+    if (err.response?.status === 429) {
+      console.warn('[backfill] Strava rate limit hit, pausing for 15 minutes');
+      await new Promise((r) => setTimeout(r, 15 * 60 * 1000));
+    } else {
+      console.error(`[backfill] Failed for activity ${activity.strava_id}:`, err.message);
+    }
     // Leave detail_polyline as NULL so it will be retried
   }
 
