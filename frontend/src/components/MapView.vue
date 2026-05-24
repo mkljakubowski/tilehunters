@@ -17,6 +17,10 @@
         <input type="checkbox" v-model="showRoute" />
         Route
       </label>
+      <div class="control-divider" />
+      <button class="gpx-btn" @click="$refs.gpxInput.click()">GPX</button>
+      <button v-if="gpxLayer" class="gpx-clear-btn" @click="clearGpx" title="Clear GPX">✕</button>
+      <input ref="gpxInput" type="file" accept=".gpx" class="gpx-file-input" @change="onGpxFile" />
     </div>
   </div>
 </template>
@@ -47,6 +51,7 @@ const emit = defineEmits(['tileClick', 'activityClick']);
 const mapContainer = ref(null);
 const mapType = ref('dark');
 const showRoute = ref(true);
+const gpxLayer = ref(null);
 
 const mapTypes = [
   {
@@ -89,6 +94,7 @@ let unvisitedLayerGroup = null;
 let tilesLayerGroup = null;
 let allRoutesLayerGroup = null;
 let activityPolylineLayer = null;
+let gpxPreviewLayerGroup = null;
 let visitedSet = new Set();
 let biggestSquareSet = new Set();
 
@@ -235,6 +241,132 @@ function drawSelectedRoute(latLons) {
   map.fitBounds(activityPolylineLayer.getBounds(), { padding: [40, 40] });
 }
 
+function haversineMeters(lat0, lon0, lat1, lon1) {
+  const R = 6371000;
+  const dLat = (lat1 - lat0) * Math.PI / 180;
+  const dLon = (lon1 - lon0) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat0 * Math.PI / 180) * Math.cos(lat1 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function computeNewTilesForTracks(tracks) {
+  const STEP = 50;
+  const newTiles = [];
+
+  for (const points of tracks) {
+    for (let i = 0; i < points.length; i++) {
+      const [lat, lon] = points[i];
+      const t = latLonToTile(lat, lon, TILE_ZOOM);
+      const key = `${t.x},${t.y}`;
+      if (!visitedSet.has(key)) newTiles.push({ x: t.x, y: t.y, _key: key });
+
+      if (i === 0) continue;
+      const [pLat, pLon] = points[i - 1];
+      const steps = Math.max(1, Math.ceil(haversineMeters(pLat, pLon, lat, lon) / STEP));
+      for (let s = 1; s < steps; s++) {
+        const frac = s / steps;
+        const it = latLonToTile(pLat + frac * (lat - pLat), pLon + frac * (lon - pLon), TILE_ZOOM);
+        const k = `${it.x},${it.y}`;
+        if (!visitedSet.has(k)) newTiles.push({ x: it.x, y: it.y, _key: k });
+      }
+    }
+  }
+
+  // deduplicate by key
+  const seen = new Set();
+  return newTiles.filter(({ _key }) => seen.has(_key) ? false : seen.add(_key));
+}
+
+function drawGpxPreview(tracks) {
+  gpxPreviewLayerGroup.clearLayers();
+  const newTiles = computeNewTilesForTracks(tracks);
+  if (newTiles.length === 0) return;
+
+  const renderer = L.canvas({ padding: 0.5 });
+  for (const tile of newTiles) {
+    L.rectangle(getTileBounds(tile.x, tile.y, TILE_ZOOM), {
+      color: '#fde047',
+      weight: 1,
+      opacity: 0.6,
+      fillColor: '#fde047',
+      fillOpacity: 0.2,
+      interactive: false,
+      renderer,
+    }).addTo(gpxPreviewLayerGroup);
+  }
+}
+
+function parseGpx(text) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const ns = doc.documentElement.namespaceURI || '';
+
+  const getAttr = (el, attr) => parseFloat(el.getAttribute(attr));
+
+  const pointsFromElements = (tagName) =>
+    [...doc.getElementsByTagNameNS(ns, tagName),
+     ...doc.getElementsByTagName(tagName)]
+      .filter((el, i, arr) => arr.indexOf(el) === i) // deduplicate
+      .map((pt) => [getAttr(pt, 'lat'), getAttr(pt, 'lon')])
+      .filter(([lat, lon]) => !isNaN(lat) && !isNaN(lon));
+
+  // Collect track segments and route points
+  const tracks = [];
+  for (const seg of [...doc.getElementsByTagNameNS(ns, 'trkseg'), ...doc.getElementsByTagName('trkseg')]) {
+    const pts = [...seg.getElementsByTagNameNS(ns, 'trkpt'), ...seg.getElementsByTagName('trkpt')]
+      .filter((el, i, arr) => arr.indexOf(el) === i)
+      .map((pt) => [getAttr(pt, 'lat'), getAttr(pt, 'lon')])
+      .filter(([lat, lon]) => !isNaN(lat) && !isNaN(lon));
+    if (pts.length > 0) tracks.push(pts);
+  }
+
+  const routePts = pointsFromElements('rtept');
+  if (routePts.length > 0) tracks.push(routePts);
+
+  return tracks;
+}
+
+function clearGpx() {
+  if (gpxLayer.value) {
+    gpxLayer.value.remove();
+    gpxLayer.value = null;
+  }
+  gpxPreviewLayerGroup?.clearLayers();
+}
+
+function onGpxFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const tracks = parseGpx(e.target.result);
+    if (!tracks.length) return;
+
+    clearGpx();
+
+    const group = L.layerGroup().addTo(map);
+    for (const pts of tracks) {
+      L.polyline(pts, {
+        color: '#facc15',
+        weight: 3,
+        opacity: 0.9,
+        lineJoin: 'round',
+      }).addTo(group);
+    }
+    gpxLayer.value = group;
+    drawGpxPreview(tracks);
+
+    // Zoom to the GPX track
+    const allPts = tracks.flat();
+    if (allPts.length > 0) {
+      map.fitBounds(L.latLngBounds(allPts), { padding: [40, 40] });
+    }
+  };
+  reader.readAsText(file);
+}
+
 onMounted(() => {
   map = L.map(mapContainer.value, {
     center: [47.3769, 8.5417],
@@ -251,6 +383,7 @@ onMounted(() => {
   unvisitedLayerGroup = L.layerGroup().addTo(map);
   tilesLayerGroup = L.layerGroup().addTo(map);
   allRoutesLayerGroup = L.layerGroup().addTo(map);
+  gpxPreviewLayerGroup = L.layerGroup().addTo(map);
 
   map.on('moveend zoomend', drawUnvisitedTiles);
 
@@ -402,5 +535,41 @@ watch(showRoute, (val) => {
   cursor: pointer;
   width: 14px;
   height: 14px;
+}
+
+.gpx-file-input {
+  display: none;
+}
+
+.gpx-btn {
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 4px;
+  color: #d1d5db;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.gpx-btn:hover {
+  background: #374151;
+  color: #f3f4f6;
+}
+
+.gpx-clear-btn {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0.1rem 0.2rem;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.gpx-clear-btn:hover {
+  color: #f87171;
 }
 </style>
