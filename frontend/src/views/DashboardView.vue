@@ -67,7 +67,7 @@
         @reprocess="reprocessTiles"
       />
       <StatsTab
-        v-else
+        v-else-if="sidebarTab === 'stats'"
         :tiles="visitedTiles"
         :activities="activities"
       />

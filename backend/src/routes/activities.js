@@ -179,6 +179,44 @@ router.get('/polylines', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/activities/reprocess-all-tiles — recompute tiles for every activity of the user
+router.post('/reprocess-all-tiles', requireAuth, async (req, res) => {
+  const ZOOM = 14;
+  try {
+    const result = await pool.query(
+      `SELECT id, start_date, COALESCE(NULLIF(detail_polyline, ''), summary_polyline) AS polyline
+       FROM activities
+       WHERE user_id = $1 AND summary_polyline IS NOT NULL AND summary_polyline != ''
+       ORDER BY start_date DESC`,
+      [req.session.userId]
+    );
+
+    let totalInserted = 0;
+    let processed = 0;
+
+    for (const row of result.rows) {
+      if (!row.polyline) continue;
+      const tiles = computeTilesForPolyline(row.polyline, ZOOM);
+      for (const tile of tiles) {
+        const r = await pool.query(
+          `INSERT INTO visited_tiles (user_id, x, y, zoom, first_visited_at)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (user_id, x, y, zoom) DO NOTHING`,
+          [req.session.userId, tile.x, tile.y, ZOOM, row.start_date]
+        );
+        totalInserted += r.rowCount;
+      }
+      await pool.query('UPDATE activities SET tile_count = $1 WHERE id = $2', [tiles.length, row.id]);
+      processed++;
+    }
+
+    res.json({ processed, inserted: totalInserted });
+  } catch (err) {
+    console.error('Reprocess all tiles error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // POST /api/activities/:id/reprocess-tiles — recompute visited tiles from best available polyline
 router.post('/:id/reprocess-tiles', requireAuth, async (req, res) => {
   const ZOOM = 14;
