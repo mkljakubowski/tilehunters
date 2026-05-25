@@ -201,9 +201,3 @@ tilehunters/
 5. Unique tile coordinates are upserted into the `visited_tiles` table.
 
 Zoom level 14 tiles are roughly 2.4 km × 1.5 km at mid-latitudes — small enough to be meaningful for local exploration.
-
----
-
-## License
-
-MIT
