@@ -1,0 +1,5 @@
+.env
+.claude
+**/node_modules
+**/.git
+frontend/dist
