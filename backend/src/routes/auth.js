@@ -2,6 +2,7 @@ import { Router } from 'express';
 import pool from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getAuthUrl, exchangeCode } from '../services/strava.js';
+import { STRAVA_WHITELIST } from '../config.js';
 
 const router = Router();
 
@@ -23,6 +24,10 @@ router.get('/callback', async (req, res) => {
   try {
     const tokenData = await exchangeCode(code);
     const { athlete, access_token, refresh_token, expires_at } = tokenData;
+
+    if (STRAVA_WHITELIST.length > 0 && !STRAVA_WHITELIST.includes(athlete.id)) {
+      return res.redirect(`${frontendUrl}/?error=not_allowed`);
+    }
 
     // Upsert user
     const result = await pool.query(
