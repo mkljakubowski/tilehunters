@@ -8,6 +8,18 @@
     </div>
 
     <div v-else class="route-list">
+      <div class="list-header">
+        <label class="route-toggle">
+          <input
+            type="checkbox"
+            :checked="allSelected"
+            :indeterminate.prop="someSelected && !allSelected"
+            @change="toggleAll"
+          />
+          <span class="header-label">Show all</span>
+        </label>
+        <span class="header-count">{{ routes.length }} route{{ routes.length === 1 ? '' : 's' }}</span>
+      </div>
       <div v-for="route in routes" :key="route.id" class="route-item">
         <div class="route-header">
           <label class="route-toggle">
@@ -23,13 +35,25 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '../api/index.js';
 
 const emit = defineEmits(['routes-changed']);
 
 const routes = ref([]);
 const activeIds = ref(new Set());
+
+const allSelected = computed(() => routes.value.length > 0 && routes.value.every((r) => activeIds.value.has(r.id)));
+const someSelected = computed(() => routes.value.some((r) => activeIds.value.has(r.id)));
+
+function toggleAll() {
+  if (allSelected.value) {
+    activeIds.value = new Set();
+  } else {
+    activeIds.value = new Set(routes.value.map((r) => r.id));
+  }
+  emitActive();
+}
 
 async function fetchRoutes() {
   try {
@@ -108,6 +132,27 @@ defineExpose({ fetchRoutes });
 .route-list {
   display: flex;
   flex-direction: column;
+}
+
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid #1f2937;
+  background: #0f1623;
+  flex-shrink: 0;
+}
+
+.header-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #9ca3af;
+}
+
+.header-count {
+  font-size: 0.72rem;
+  color: #4b5563;
 }
 
 .route-item {
