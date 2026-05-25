@@ -15,7 +15,7 @@
       <div class="control-divider" />
       <label class="control-toggle">
         <input type="checkbox" v-model="showRoute" />
-        Route
+        Routes
       </label>
       <div class="control-divider" />
       <button class="gpx-btn" @click="$refs.gpxInput.click()">GPX</button>
