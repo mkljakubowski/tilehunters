@@ -9,6 +9,7 @@ import { startPolylineBackfill } from './services/polylineBackfill.js';
 import authRoutes from './routes/auth.js';
 import activitiesRoutes from './routes/activities.js';
 import tilesRoutes from './routes/tiles.js';
+import routesRoutes from './routes/routes.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,8 +22,8 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Session with PostgreSQL store
 app.use(session({
@@ -46,6 +47,7 @@ app.use(session({
 app.use('/api/auth', authRoutes);
 app.use('/api/activities', activitiesRoutes);
 app.use('/api/tiles', tilesRoutes);
+app.use('/api/routes', routesRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

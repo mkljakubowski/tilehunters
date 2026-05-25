@@ -65,6 +65,20 @@ export async function runMigrations() {
       ALTER TABLE activities ADD COLUMN IF NOT EXISTS tile_count INTEGER;
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS routes (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        points JSONB NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_routes_user ON routes(user_id);
+    `);
+
     console.log('Migrations completed successfully');
   } finally {
     client.release();

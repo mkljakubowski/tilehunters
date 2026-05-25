@@ -19,7 +19,10 @@
       </label>
       <div class="control-divider" />
       <button class="gpx-btn" @click="$refs.gpxInput.click()">GPX</button>
-      <button v-if="gpxLayer" class="gpx-clear-btn" @click="clearGpx" title="Clear GPX">✕</button>
+      <template v-if="gpxLayer">
+        <button class="gpx-save-btn" @click="saveGpxRoute">Save</button>
+        <button class="gpx-clear-btn" @click="clearGpx" title="Clear GPX">✕</button>
+      </template>
       <input ref="gpxInput" type="file" accept=".gpx" class="gpx-file-input" @change="onGpxFile" />
     </div>
   </div>
@@ -30,23 +33,16 @@ import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { computeBiggestSquare } from '../utils/tileStats.js';
+import api from '../api/index.js';
 
 const props = defineProps({
-  tiles: {
-    type: Array,
-    default: () => [],
-  },
-  allPolylines: {
-    type: Array,
-    default: () => [],
-  },
-  selectedActivityPolyline: {
-    type: Array,
-    default: null,
-  },
+  tiles: { type: Array, default: () => [] },
+  allPolylines: { type: Array, default: () => [] },
+  selectedActivityPolyline: { type: Array, default: null },
+  savedRoutes: { type: Array, default: () => [] },
 });
 
-const emit = defineEmits(['tileClick', 'activityClick']);
+const emit = defineEmits(['tileClick', 'activityClick', 'routeSaved']);
 
 const mapContainer = ref(null);
 const mapType = ref('light');
@@ -102,6 +98,8 @@ let tilesLayerGroup = null;
 let allRoutesLayerGroup = null;
 let activityPolylineLayer = null;
 let gpxPreviewLayerGroup = null;
+let savedRoutesLayerGroup = null;
+let savedRoutesPreviewLayerGroup = null;
 let visitedSet = new Set();
 let biggestSquareSet = new Set();
 
@@ -338,6 +336,7 @@ function clearGpx() {
     gpxLayer.value.remove();
     gpxLayer.value = null;
   }
+  currentGpxTracks = [];
   gpxPreviewLayerGroup?.clearLayers();
 }
 
@@ -362,6 +361,7 @@ function onGpxFile(event) {
         lineJoin: 'round',
       }).addTo(group);
     }
+    currentGpxTracks = tracks;
     gpxLayer.value = group;
     drawGpxPreview(tracks);
 
@@ -372,6 +372,57 @@ function onGpxFile(event) {
     }
   };
   reader.readAsText(file);
+}
+
+let currentGpxTracks = [];
+
+function drawSavedRoutes(routes) {
+  savedRoutesLayerGroup.clearLayers();
+  for (const route of routes) {
+    if (!route.points || route.points.length === 0) continue;
+    L.polyline(route.points, {
+      color: '#a855f7',
+      weight: 2.5,
+      opacity: 0.8,
+      lineJoin: 'round',
+      interactive: false,
+    }).addTo(savedRoutesLayerGroup);
+  }
+}
+
+function drawSavedRoutesPreview(routes) {
+  savedRoutesPreviewLayerGroup.clearLayers();
+  const tracks = routes
+    .filter((r) => r.points && r.points.length > 0)
+    .map((r) => r.points);
+  if (tracks.length === 0) return;
+
+  const newTiles = computeNewTilesForTracks(tracks);
+  const renderer = L.canvas({ padding: 0.5 });
+  for (const tile of newTiles) {
+    L.rectangle(getTileBounds(tile.x, tile.y, TILE_ZOOM), {
+      color: '#a855f7',
+      weight: 1,
+      opacity: 0.6,
+      fillColor: '#a855f7',
+      fillOpacity: 0.25,
+      interactive: false,
+      renderer,
+    }).addTo(savedRoutesPreviewLayerGroup);
+  }
+}
+
+async function saveGpxRoute() {
+  const allPts = currentGpxTracks.flat();
+  if (allPts.length === 0) return;
+  const name = prompt('Route name:', 'My Route');
+  if (!name) return;
+  try {
+    await api.post('/routes', { name, points: allPts });
+    emit('routeSaved');
+  } catch (err) {
+    console.error('Failed to save route:', err);
+  }
 }
 
 const MAP_STATE_KEY = 'tilehunters_map_state';
@@ -411,6 +462,8 @@ onMounted(() => {
   tilesLayerGroup = L.layerGroup().addTo(map);
   allRoutesLayerGroup = L.layerGroup().addTo(map);
   gpxPreviewLayerGroup = L.layerGroup().addTo(map);
+  savedRoutesLayerGroup = L.layerGroup().addTo(map);
+  savedRoutesPreviewLayerGroup = L.layerGroup().addTo(map);
 
   map.on('moveend zoomend', () => { saveMapState(); drawUnvisitedTiles(); });
 
@@ -460,6 +513,17 @@ watch(
   (latLons) => {
     if (map) drawSelectedRoute(latLons);
   }
+);
+
+watch(
+  () => props.savedRoutes,
+  (routes) => {
+    if (map) {
+      drawSavedRoutes(routes);
+      drawSavedRoutesPreview(routes);
+    }
+  },
+  { deep: false }
 );
 
 watch(showRoute, (val) => {
@@ -576,6 +640,22 @@ watch(showRoute, (val) => {
 .gpx-btn:hover {
   background: #374151;
   color: #f3f4f6;
+}
+
+.gpx-save-btn {
+  background: #422006;
+  border: 1px solid #facc15;
+  border-radius: 4px;
+  color: #facc15;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.gpx-save-btn:hover {
+  background: #713f12;
 }
 
 .gpx-clear-btn {

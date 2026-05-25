@@ -56,6 +56,7 @@
       <div class="sidebar-tabs">
         <button :class="['tab-btn', { active: sidebarTab === 'activities' }]" @click="sidebarTab = 'activities'">Activities</button>
         <button :class="['tab-btn', { active: sidebarTab === 'stats' }]" @click="sidebarTab = 'stats'">Stats</button>
+        <button :class="['tab-btn', { active: sidebarTab === 'routes' }]" @click="sidebarTab = 'routes'">My Routes</button>
       </div>
 
       <ActivityList
@@ -71,6 +72,12 @@
         :tiles="visitedTiles"
         :activities="activities"
       />
+      <MyRoutesTab
+        v-else-if="sidebarTab === 'routes'"
+        ref="myRoutesTab"
+        :active-routes="activeRoutes"
+        @routes-changed="onRoutesChanged"
+      />
     </aside>
 
     <!-- Map -->
@@ -79,8 +86,10 @@
         :tiles="visitedTiles"
         :all-polylines="allPolylines"
         :selected-activity-polyline="selectedPolyline"
+        :saved-routes="activeRoutes"
         @tile-click="onTileClick"
         @activity-click="onActivityClick"
+        @route-saved="onRouteSaved"
       />
 
       <!-- Loading overlay -->
@@ -101,6 +110,7 @@ import MapView from '../components/MapView.vue';
 import StatsPanel from '../components/StatsPanel.vue';
 import ActivityList from '../components/ActivityList.vue';
 import StatsTab from '../components/StatsTab.vue';
+import MyRoutesTab from '../components/MyRoutesTab.vue';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -116,6 +126,8 @@ const syncing = ref(false);
 const syncResult = ref('');
 const syncError = ref('');
 const reprocessingId = ref(null);
+const activeRoutes = ref([]);
+const myRoutesTab = ref(null);
 
 const tileCount = computed(() => visitedTiles.value.length);
 const activityCount = computed(() => activities.value.length);
@@ -206,6 +218,16 @@ async function reprocessTiles(activity) {
   } finally {
     reprocessingId.value = null;
   }
+}
+
+function onRoutesChanged(routes) {
+  activeRoutes.value = routes;
+}
+
+async function onRouteSaved() {
+  sidebarTab.value = 'routes';
+  await nextTick();
+  myRoutesTab.value?.fetchRoutes();
 }
 
 async function onActivityClick(activityId) {
