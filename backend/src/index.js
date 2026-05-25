@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import express from 'express';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
@@ -10,6 +12,8 @@ import authRoutes from './routes/auth.js';
 import activitiesRoutes from './routes/activities.js';
 import tilesRoutes from './routes/tiles.js';
 import routesRoutes from './routes/routes.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -52,6 +56,13 @@ app.use('/api/routes', routesRoutes);
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+// Serve frontend static files in production
+const publicDir = path.join(__dirname, '../../public');
+app.use(express.static(publicDir));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(publicDir, 'index.html'));
 });
 
 // Start server

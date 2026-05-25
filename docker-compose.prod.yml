@@ -15,8 +15,8 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
-    image: ${REGISTRY:-docker.io}/YOUR_DOCKERHUB_USER/tilehunters-backend:latest
+  app:
+    image: YOUR_DOCKERHUB_USER/tilehunters:latest
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -36,15 +36,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "3000:3000"
-
-  frontend:
-    image: ${REGISTRY:-docker.io}/YOUR_DOCKERHUB_USER/tilehunters-frontend:latest
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
+      - "80:3000"
 
 volumes:
   postgres_data:
