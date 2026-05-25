@@ -2,10 +2,11 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: tilehunters
       POSTGRES_USER: tilehunters
-      POSTGRES_PASSWORD: tilehunters
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-tilehunters}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -15,7 +16,8 @@ services:
       retries: 5
 
   backend:
-    build: ./backend
+    image: ${REGISTRY:-docker.io}/YOUR_DOCKERHUB_USER/tilehunters-backend:latest
+    restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -23,12 +25,12 @@ services:
       DB_PORT: 5432
       DB_NAME: tilehunters
       DB_USER: tilehunters
-      DB_PASSWORD: tilehunters
-      SESSION_SECRET: ${SESSION_SECRET:-change_me_in_production}
+      DB_PASSWORD: ${DB_PASSWORD:-tilehunters}
+      SESSION_SECRET: ${SESSION_SECRET}
       STRAVA_CLIENT_ID: ${STRAVA_CLIENT_ID}
       STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET}
-      STRAVA_REDIRECT_URI: ${STRAVA_REDIRECT_URI:-http://localhost/api/auth/callback}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      STRAVA_REDIRECT_URI: ${STRAVA_REDIRECT_URI}
+      FRONTEND_URL: ${FRONTEND_URL}
       STRAVA_WHITELIST: ${STRAVA_WHITELIST:-}
     depends_on:
       postgres:
@@ -37,7 +39,8 @@ services:
       - "3000:3000"
 
   frontend:
-    build: ./frontend
+    image: ${REGISTRY:-docker.io}/YOUR_DOCKERHUB_USER/tilehunters-frontend:latest
+    restart: unless-stopped
     ports:
       - "80:80"
     depends_on:
