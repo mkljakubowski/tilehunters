@@ -21,8 +21,11 @@ const PgSession = connectPgSimple(session);
 
 // CORS — allow frontend origin with credentials
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost';
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? [frontendUrl]
+  : [frontendUrl, 'http://localhost:5173', 'http://localhost:3000'];
 app.use(cors({
-  origin: [frontendUrl, 'http://localhost:5173', 'http://localhost:3000'],
+  origin: allowedOrigins,
   credentials: true,
 }));
 
@@ -40,7 +43,7 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production' && process.env.HTTPS === 'true',
+    secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     sameSite: 'lax',

@@ -1,9 +1,18 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import pool from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getActivities, getActivity, refreshToken } from '../services/strava.js';
 import { computeTilesForPolyline } from '../services/tileComputer.js';
 import polyline from '@mapbox/polyline';
+
+const syncLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many sync requests, please wait before trying again.' },
+});
 
 const router = Router();
 
@@ -31,7 +40,7 @@ async function getValidAccessToken(userId) {
 }
 
 // POST /api/activities/sync — sync all activities from Strava
-router.post('/sync', requireAuth, async (req, res) => {
+router.post('/sync', requireAuth, syncLimiter, async (req, res) => {
   try {
     const accessToken = await getValidAccessToken(req.session.userId);
     const userId = req.session.userId;
