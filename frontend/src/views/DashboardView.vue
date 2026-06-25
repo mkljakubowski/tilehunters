@@ -253,7 +253,13 @@ async function syncActivities() {
     await Promise.all([fetchTiles(), fetchActivities()]);
   } catch (err) {
     console.error('Sync failed:', err);
-    syncError.value = err.response?.data?.details || err.message || 'Sync failed. Please try again.';
+    const data = err.response?.data;
+    if (err.response?.status === 429 && data?.retryAfter) {
+      const mins = Math.ceil(data.retryAfter / 60);
+      syncError.value = `Please wait ${mins} minute${mins === 1 ? '' : 's'} before syncing again.`;
+    } else {
+      syncError.value = data?.details || err.message || 'Sync failed. Please try again.';
+    }
   } finally {
     syncing.value = false;
   }

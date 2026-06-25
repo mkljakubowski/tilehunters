@@ -79,6 +79,10 @@ export async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_routes_user ON routes(user_id);
     `);
 
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS last_sync_at TIMESTAMP;
+    `);
+
     console.log('Migrations completed successfully');
   } finally {
     client.release();
