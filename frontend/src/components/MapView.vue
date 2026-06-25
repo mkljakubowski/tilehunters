@@ -42,7 +42,7 @@ const props = defineProps({
   savedRoutes: { type: Array, default: () => [] },
 });
 
-const emit = defineEmits(['tileClick', 'activityClick', 'routeSaved']);
+const emit = defineEmits(['tileClick', 'activityClick', 'routeSaved', 'showRoutes']);
 
 const mapContainer = ref(null);
 const mapType = ref('light');
@@ -325,8 +325,10 @@ function parseGpx(text) {
     if (pts.length > 0) tracks.push(pts);
   }
 
-  const routePts = pointsFromElements('rtept');
-  if (routePts.length > 0) tracks.push(routePts);
+  if (tracks.length === 0) {
+    const routePts = pointsFromElements('rtept');
+    if (routePts.length > 0) tracks.push(routePts);
+  }
 
   return tracks;
 }
@@ -529,6 +531,7 @@ watch(
 watch(showRoute, (val) => {
   if (!map) return;
   if (val) {
+    emit('showRoutes');
     drawAllRoutes(props.allPolylines);
   } else {
     allRoutesLayerGroup.clearLayers();
@@ -559,6 +562,21 @@ watch(showRoute, (val) => {
   color: #e5e7eb;
   backdrop-filter: blur(6px);
   user-select: none;
+}
+
+@media (max-width: 768px) {
+  .map-control {
+    bottom: calc(72px + 0.625rem);
+    left: 0.5rem;
+    right: 0.5rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .map-control::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .control-section {

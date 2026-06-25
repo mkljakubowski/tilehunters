@@ -174,6 +174,34 @@ h1 {
   font-size: 1rem;
 }
 
+@media (max-width: 480px) {
+  h1 {
+    font-size: 2.5rem;
+    letter-spacing: -0.5px;
+  }
+
+  .tagline {
+    font-size: 1.05rem;
+  }
+
+  .description {
+    font-size: 0.9rem;
+  }
+
+  .strava-btn {
+    padding: 0.875rem 1.5rem;
+    font-size: 0.95rem;
+  }
+
+  .hero {
+    padding: 1.5rem 1rem;
+  }
+
+  .features {
+    gap: 1rem;
+  }
+}
+
 .error-message {
   background: rgba(239, 68, 68, 0.15);
   border: 1px solid rgba(239, 68, 68, 0.4);

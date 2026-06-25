@@ -16,6 +16,7 @@ import routesRoutes from './routes/routes.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 const PgSession = connectPgSimple(session);
 
@@ -43,7 +44,7 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.HTTPS === 'true',
     httpOnly: true,
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     sameSite: 'lax',
@@ -62,7 +63,7 @@ app.get('/health', (req, res) => {
 });
 
 // Serve frontend static files in production
-const publicDir = path.join(__dirname, '../../public');
+const publicDir = path.join(__dirname, '../public');
 app.use(express.static(publicDir));
 app.get('*', (req, res) => {
   res.sendFile(path.join(publicDir, 'index.html'));

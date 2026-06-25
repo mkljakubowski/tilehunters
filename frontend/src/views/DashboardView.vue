@@ -1,7 +1,50 @@
 <template>
   <div class="dashboard">
+    <!-- Mobile-only top bar -->
+    <div class="mobile-topbar">
+      <div class="brand">
+        <svg width="24" height="24" viewBox="0 0 64 64" fill="none">
+          <rect width="64" height="64" rx="12" fill="#FF6B35"/>
+          <path d="M12 32 L32 12 L52 32 L32 52 Z" fill="none" stroke="white" stroke-width="4"/>
+          <rect x="24" y="24" width="16" height="16" fill="rgba(255,255,255,0.3)" stroke="white" stroke-width="2"/>
+        </svg>
+        <span>TileHunters</span>
+      </div>
+      <div class="mobile-topbar-right">
+        <span class="mobile-stats">{{ tileCount.toLocaleString() }} tiles</span>
+        <button
+          class="sync-btn mobile-sync-btn"
+          :class="{ syncing }"
+          :disabled="syncing"
+          @click="syncActivities"
+        >
+          <svg
+            width="13" height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            :class="{ spinning: syncing }"
+          >
+            <path d="M23 4v6h-6M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+          {{ syncing ? '…' : 'Sync' }}
+        </button>
+        <button class="logout-btn" @click="handleLogout" title="Logout">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile sync feedback -->
+    <div v-if="syncResult" class="mobile-toast">{{ syncResult }}</div>
+    <div v-if="syncError" class="mobile-toast mobile-toast-error">{{ syncError }}</div>
+
     <!-- Sidebar -->
-    <aside class="sidebar">
+    <aside class="sidebar" :class="{ 'panel-open': mobileOpen }">
       <div class="sidebar-header">
         <div class="brand">
           <svg width="28" height="28" viewBox="0 0 64 64" fill="none">
@@ -18,11 +61,13 @@
         </button>
       </div>
 
-      <StatsPanel
-        :user="userStore.user"
-        :tile-count="tileCount"
-        :activity-count="activityCount"
-      />
+      <div class="stats-wrapper">
+        <StatsPanel
+          :user="userStore.user"
+          :tile-count="tileCount"
+          :activity-count="activityCount"
+        />
+      </div>
 
       <div class="sync-section">
         <button
@@ -52,6 +97,11 @@
           {{ syncError }}
         </div>
       </div>
+
+      <!-- Mobile panel handle (hidden on desktop) -->
+      <button class="panel-handle" @click="mobileOpen = !mobileOpen" aria-label="Toggle panel">
+        <div class="handle-bar"></div>
+      </button>
 
       <div class="sidebar-tabs">
         <button :class="['tab-btn', { active: sidebarTab === 'activities' }]" @click="sidebarTab = 'activities'">Activities</button>
@@ -90,6 +140,7 @@
         @tile-click="onTileClick"
         @activity-click="onActivityClick"
         @route-saved="onRouteSaved"
+        @show-routes="onShowRoutes"
       />
 
       <!-- Loading overlay -->
@@ -128,6 +179,8 @@ const syncError = ref('');
 const reprocessingId = ref(null);
 const activeRoutes = ref([]);
 const myRoutesTab = ref(null);
+const mobileOpen = ref(false);
+const polylinesLoaded = ref(false);
 
 const tileCount = computed(() => visitedTiles.value.length);
 const activityCount = computed(() => activities.value.length);
@@ -157,14 +210,20 @@ async function fetchAllPolylines() {
   try {
     const response = await api.get('/activities/polylines');
     allPolylines.value = response.data;
+    polylinesLoaded.value = true;
   } catch (err) {
     console.error('Failed to fetch polylines:', err);
   }
 }
 
+async function onShowRoutes() {
+  if (!polylinesLoaded.value) {
+    await fetchAllPolylines();
+  }
+}
+
 async function selectActivity(activity) {
   if (selectedActivity.value?.id === activity.id) {
-    // Deselect
     selectedActivity.value = null;
     selectedPolyline.value = null;
     return;
@@ -190,7 +249,8 @@ async function syncActivities() {
     const response = await api.post('/activities/sync');
     const { synced, tiles } = response.data;
     syncResult.value = `Synced ${synced} new activit${synced === 1 ? 'y' : 'ies'}. Total: ${tiles.toLocaleString()} tiles.`;
-    await Promise.all([fetchTiles(), fetchActivities(), fetchAllPolylines()]);
+    polylinesLoaded.value = false;
+    await Promise.all([fetchTiles(), fetchActivities()]);
   } catch (err) {
     console.error('Sync failed:', err);
     syncError.value = err.response?.data?.details || err.message || 'Sync failed. Please try again.';
@@ -244,7 +304,7 @@ onMounted(async () => {
   if (!userStore.isLoggedIn) {
     await userStore.fetchMe();
   }
-  await Promise.all([fetchTiles(), fetchActivities(), fetchAllPolylines()]);
+  await Promise.all([fetchTiles(), fetchActivities()]);
 });
 </script>
 
@@ -272,6 +332,7 @@ onMounted(async () => {
   justify-content: space-between;
   padding: 1rem;
   border-bottom: 1px solid #1f2937;
+  flex-shrink: 0;
 }
 
 .brand {
@@ -331,6 +392,7 @@ onMounted(async () => {
 .sync-section {
   padding: 0.875rem 1rem;
   border-bottom: 1px solid #1f2937;
+  flex-shrink: 0;
 }
 
 .sync-btn {
@@ -417,5 +479,168 @@ onMounted(async () => {
   border-top-color: #FF6B35;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+}
+
+/* Mobile-only elements — hidden on desktop */
+.mobile-topbar {
+  display: none;
+}
+
+.mobile-toast {
+  display: none;
+}
+
+.panel-handle {
+  display: none;
+}
+
+/* ─── Mobile layout ──────────────────────────────────── */
+@media (max-width: 768px) {
+  .dashboard {
+    flex-direction: column;
+  }
+
+  /* Map fills the entire viewport; panel floats on top */
+  .map-area {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+  }
+
+  /* Sidebar becomes a bottom sheet */
+  .sidebar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 72px; /* collapsed: handle + tabs */
+    max-height: 62vh;
+    z-index: 200;
+    border-right: none;
+    border-top: 1px solid #374151;
+    border-radius: 16px 16px 0 0;
+    transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+  }
+
+  .sidebar.panel-open {
+    height: 62vh;
+  }
+
+  /* Desktop-only sidebar elements hidden on mobile */
+  .sidebar-header {
+    display: none;
+  }
+
+  .stats-wrapper {
+    display: none;
+  }
+
+  .sync-section {
+    display: none;
+  }
+
+  /* Mobile panel drag handle */
+  .panel-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 0.5rem 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    flex-shrink: 0;
+    touch-action: manipulation;
+  }
+
+  .handle-bar {
+    width: 36px;
+    height: 4px;
+    background: #4b5563;
+    border-radius: 2px;
+  }
+
+  /* Tab buttons — slightly taller touch targets on mobile */
+  .tab-btn {
+    padding: 0.75rem 0;
+    font-size: 0.82rem;
+  }
+
+  /* Loading overlay below the top bar */
+  .loading-overlay {
+    top: calc(52px + 0.75rem);
+  }
+
+  /* Mobile top bar */
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1rem;
+    background: #111827;
+    border-bottom: 1px solid #1f2937;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 300;
+    height: 52px;
+    flex-shrink: 0;
+  }
+
+  .mobile-topbar .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 800;
+    font-size: 1rem;
+    color: #f3f4f6;
+  }
+
+  .mobile-topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .mobile-stats {
+    font-size: 0.75rem;
+    color: #9ca3af;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .mobile-sync-btn {
+    padding: 0.4rem 0.75rem !important;
+    font-size: 0.8rem !important;
+    width: auto !important;
+  }
+
+  /* Toast for sync feedback on mobile */
+  .mobile-toast {
+    display: block;
+    position: fixed;
+    top: calc(52px + 0.5rem);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(17, 24, 39, 0.95);
+    color: #9ca3af;
+    border: 1px solid #374151;
+    padding: 0.45rem 1rem;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    z-index: 400;
+    white-space: nowrap;
+    max-width: calc(100vw - 2rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+  }
+
+  .mobile-toast-error {
+    color: #f87171;
+    border-color: rgba(248, 113, 113, 0.35);
+  }
 }
 </style>
